@@ -32,22 +32,22 @@ your change rather than trusting the absolute value.
 
 ## Rules in one line each
 
-Full wording and a "how to verify" section live in `.claude/rules/` — this is the
-list only:
+Full wording and a "how to verify" section live in `.claude/rules/`; each line below
+links to the rule that owns it:
 
 1. `app/src/core/**`, `app/scripts/**`, `materials/**`, `.coderabbit.yaml` and
-   `.github/**` are never edited — no exceptions (`do-not-touch`).
+   `.github/**` are never edited — no exceptions ([do-not-touch](.claude/rules/do-not-touch.md)).
 2. Dependency direction: `integrations/` and `sync/` → `core/`, never the other way
-   (`architecture`).
+   ([architecture](.claude/rules/architecture.md)).
 3. A new integration is exactly three changes: module, test next to it, one line in
-   `integrations/index.ts` (`architecture`).
+   `integrations/index.ts` ([architecture](.claude/rules/architecture.md)).
 4. Errors are values: `Result<T>` instead of exceptions; `send()` returns
-   `Result<void>` (`conventions`).
+   `Result<void>` ([conventions](.claude/rules/conventions.md)).
 5. Through the core and only through it: HTTP → `postJson()`, env → `readEnv()`,
-   JSON → `parseJson(text, guard)`, logging → `log` (`conventions`).
-6. No `any`, no new dependencies (`conventions`).
+   JSON → `parseJson(text, guard)`, logging → `log` ([conventions](.claude/rules/conventions.md)).
+6. No `any`, no new dependencies ([conventions](.claude/rules/conventions.md)).
 7. Notifications never carry a lead's `email` or `phone` — only `name`, `source`,
-   `budgetUsd` (`conventions`).
+   `budgetUsd` ([conventions](.claude/rules/conventions.md)).
 
 ## Before committing
 

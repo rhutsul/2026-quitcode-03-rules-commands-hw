@@ -9,6 +9,12 @@ argument-hint: <file path, e.g. app/src/integrations/sheets-append.ts>
 (If the line above holds no concrete file, the target is in the message right after the
 command name. If it is not there either — ask and stop.)
 
+**Refuse the target outright** if it resolves inside a protected path —
+`app/src/core/**`, `app/scripts/**`, `materials/**`, `.github/**`, `.coderabbit.yaml`.
+Those files are not refactored through this command at all, whoever asks: say which
+path it is and stop. This command works on `app/src/integrations/**` and
+`app/src/sync/**`.
+
 ## Steps
 
 1. **Record the "before" state** and print the numbers in the chat. Run the three
