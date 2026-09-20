@@ -11,5 +11,5 @@
   `/generate-integration`. The argument is substituted into `$ARGUMENTS`.
 - The app lives in `app/`. Run npm from there (`cd app && npm test`) or use
   `npm --prefix app`.
-- Files ending in `.off` are rules or commands deliberately disabled for an A/B run
-  (Task D of this homework). Do not "fix" them or rename them back unasked.
+- Files ending in `.off` are configuration that has been disabled on purpose. Do not
+  "fix" them or rename them back unasked.

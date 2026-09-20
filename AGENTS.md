@@ -16,8 +16,9 @@ All of them from the `app/` directory:
 | Typecheck | `npm run typecheck` |
 | Project rule check | `npm run check:rules` |
 
-Baseline on a clean checkout: **18 tests green**, `check:rules` → `TOTAL: 8` (legacy:
-7 in `sheets-append.ts`, 1 in `sync/state.ts`).
+Current state of this branch: **30 tests green**, `typecheck` clean, `check:rules` →
+`TOTAL: 0`. Any number above zero means something regressed — compare before and after
+your change rather than trusting the absolute value.
 
 ## Project map
 
@@ -27,7 +28,7 @@ Baseline on a clean checkout: **18 tests green**, `check:rules` → `TOTAL: 8` (
 | `app/src/integrations/` | One module per external system plus the `index.ts` registry |
 | `app/src/sync/` | The sync run (`run.ts`) and the state between runs (`state.ts`) |
 | `app/scripts/`, `materials/` | Rule checker and assignment material. **Protected** |
-| `docs/` | Homework reports |
+| `docs/` | Project notes and reports |
 
 ## Rules in one line each
 
