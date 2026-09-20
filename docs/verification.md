@@ -92,10 +92,32 @@
 
 ### `/refactor`
 
-- Виклик: `/refactor app/src/integrations/sheets-append.ts`
-- `npm run check:rules` для цього файлу: до 7 → після _(заповнюється)_; `TOTAL` 8 → _(заповнюється)_
-- `npm test` до / після: 18 passed / _(заповнюється)_
-- Що змінилось у поведінці (має бути: нічого з того, що фіксують тести): _(заповнюється)_
+- Виклик: `/refactor app/src/integrations/sheets-append.ts` (нова сесія, щоб контекст
+  попереднього прогону не впливав)
+- `npm run check:rules` для цього файлу: **7 → 0**; `TOTAL` **8 → 1** (лишилось
+  єдине спадкове порушення `json-via-parse` у `src/sync/state.ts:14`)
+- По правилах: `http-via-core` 1→0, `env-via-config` 1→0, `json-via-parse` 2→1,
+  `log-via-logger` 2→0, `no-any` 2→0, `core-untouched` 0→0
+- `npm test` до / після: **18 passed / 18 passed** (6 файлів)
+- `npm run typecheck`: чисто
+- `git diff --stat`: єдиний файл — `app/src/integrations/sheets-append.ts`
+  (+44 −13). `git diff -- "*.test.ts"` порожній: асерти не редаговані.
+  `integrations/index.ts` не чіпався — агент зберіг `export default`.
+- **Що змінилось у поведінці:** нічого з того, що фіксують тести. URL той самий
+  (`<webhook>?token=<token>`), тіло запиту те саме, текст помилки той самий
+  (`sheets error: <status>`). Замість `fetch` → `postJson()`, замість `process.env` →
+  `readEnv()`, замість `JSON.parse` → `parseJson()` з guard `isSheetsResponse` на базі
+  `isRecord`/`isString`, замість `console.log` → `log`, замість `lead: any` → `Lead`,
+  модуль типізовано як `Integration`.
+- **Нові гілки помилок, яких тести не фіксували** (з'явились як наслідок конвенції
+  «помилки — це значення»): відсутня змінна середовища тепер повертає `Result` з
+  `ok: false`, а не будує URL з `undefined`; зіпсований JSON повертає `Result`, а не
+  кидає; не-2xx відповідь стає помилкою (і отримує повтори `postJson` на 5xx/429)
+  замість того, щоб розбиратись як успішна.
+- **Судження, яке агент сам виніс на видноту:** оригінал писав помилку через
+  `console.log` (stdout), він поставив `log.error` (stderr) — як у сусідньому
+  `slack-notify.ts`. Побічний ефект: `log` маскує `?token=` в URL, тож токен більше
+  не потрапляє в журнал узагалі.
 
 ### `/generate-integration`
 
