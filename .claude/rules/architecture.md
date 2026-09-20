@@ -1,6 +1,6 @@
 ---
 paths:
-  - "app/src/**/*.ts"
+  - "app/src/**"
 ---
 
 # lead-sync architecture

@@ -1,6 +1,6 @@
 ---
 paths:
-  - "app/src/**/*.ts"
+  - "app/src/**"
 ---
 
 # lead-sync code conventions
@@ -34,7 +34,10 @@ lost timeouts, tokens in the log, silently corrupted state. The static check in
   `unknown` plus a guard from `core/parse.ts`.
 - **No new dependencies.** The app has zero runtime dependencies. If a library
   (axios, got, ky, zod…) seems necessary, do not `npm install` — raise it in the PR.
-  Only relative (`./`, `../`) and `node:*` imports are allowed.
+  In production files (`app/src/**/*.ts` except `*.test.ts`) only relative (`./`,
+  `../`) and `node:*` imports are allowed. Test files import `vitest` — that is the
+  existing devDependency, not a new one; `check:rules` skips `*.test.ts` for the same
+  reason.
 - **Data minimisation.** Notifications (Slack, Telegram, messengers) carry only
   `name`, `source` and `budgetUsd`. `email` and `phone` never go there — full lead
   data goes only to systems of record (Google Sheet, CRM).
