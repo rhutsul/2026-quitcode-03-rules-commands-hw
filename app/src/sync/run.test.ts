@@ -35,6 +35,7 @@ let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "lead-sync-"));
   vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -61,5 +62,20 @@ describe("runSync", () => {
     await runSync(leads, [recordingIntegration(sent)], statePath);
 
     expect(sent).toEqual(["ld_0002", "ld_0003"]);
+  });
+
+  // Інцидент 09→10.09.2026: обірваний ENOSPC-запис лишив порожній файл стану,
+  // після чого кожен прогін розсилав усю історію лідів наново.
+  it("пропускає прогін на нечитному стані замість повторної розсилки всієї історії", async () => {
+    const sent: string[] = [];
+    const statePath = join(dir, "sync-state.json");
+    writeFileSync(statePath, "");
+
+    const report = await runSync(leads, [recordingIntegration(sent)], statePath);
+
+    expect(sent).toEqual([]);
+    expect(report).toEqual({ pending: 0, delivered: 0, failed: 0 });
+    // Файл лишається як був: епоха на диск не потрапляє.
+    expect(readFileSync(statePath, "utf8")).toBe("");
   });
 });

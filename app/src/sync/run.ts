@@ -9,15 +9,29 @@ export interface SyncReport {
   failed: number;
 }
 
+const EMPTY_REPORT: SyncReport = { pending: 0, delivered: 0, failed: 0 };
+
 export async function runSync(
   leads: readonly Lead[],
   integrations: readonly Integration[],
   statePath: string,
 ): Promise<SyncReport> {
   const state = loadState(statePath);
-  saveState(statePath, state); // створює файл стану при першому запуску
+  if (!state.ok) {
+    // Нечитний стан — це не привід вважати, що нічого не синхронізовано: так один
+    // обірваний запис коштував дев'яти годин повторної розсилки. Пропускаємо прогін,
+    // лишаємо файл як є і даємо людині побачити помилку.
+    log.error(`sync: ${state.error}; run skipped, state file left untouched`);
+    return { ...EMPTY_REPORT };
+  }
 
-  const pending = leads.filter((lead) => lead.createdAt > state.lastSyncedAt);
+  const created = saveState(statePath, state.value); // створює файл стану при першому запуску
+  if (!created.ok) {
+    log.error(`sync: ${created.error}; run skipped`);
+    return { ...EMPTY_REPORT };
+  }
+
+  const pending = leads.filter((lead) => lead.createdAt > state.value.lastSyncedAt);
   let delivered = 0;
   let failed = 0;
 
@@ -31,9 +45,11 @@ export async function runSync(
 
   const newest = pending.reduce(
     (latest, lead) => (lead.createdAt > latest ? lead.createdAt : latest),
-    state.lastSyncedAt,
+    state.value.lastSyncedAt,
   );
-  saveState(statePath, { lastSyncedAt: newest });
+  const saved = saveState(statePath, { lastSyncedAt: newest });
+  if (!saved.ok) log.error(`sync: ${saved.error}; progress not recorded`);
+
   log.info(`sync: ${pending.length} pending leads, ${delivered} delivered, ${failed} failed`);
   return { pending: pending.length, delivered, failed };
 }
