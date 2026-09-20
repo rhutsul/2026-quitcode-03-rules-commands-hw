@@ -121,9 +121,35 @@
 
 ### `/generate-integration`
 
-- Виклик: `/generate-integration Telegram`
-- Які файли створено: _(заповнюється)_
-- `npm test`, `npm run check:rules`: _(заповнюється)_
+- Виклик: `/generate-integration Telegram` (та сама сесія, що й `/refactor` — інші файли,
+  перетину немає)
+- **Створено рівно три зміни, як вимагає правило `architecture`:**
+  - `app/src/integrations/telegram-notify.ts` — об'єкт `Integration` + експортований
+    `formatTelegramMessage(lead)`;
+  - `app/src/integrations/telegram-notify.test.ts` — 4 тести, мережа підмінена;
+  - `app/src/integrations/index.ts` — `+1` імпорт і `+1` елемент масиву.
+- `requiredEnv`: `["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"]` — лише імена, жодного
+  значення в репозиторії.
+- `npm test`: **18 → 22 passed** (7 файлів). Чотири нові тести: мінімізація даних,
+  успішна відправка з перевіркою URL і тіла, відсутня змінна середовища, помилка від
+  Bot API.
+- `npm run check:rules`: `TOTAL` **1 → 1** — у нових файлах жодного порушення.
+  `core-untouched` 0. `npm run typecheck` чисто.
+- `git status --short` після прогону: два нові файли + змінений `index.ts`, нічого
+  більше. `package.json` не чіпався — залежностей не додано.
+- **Мінімізація даних застосована свідомо:** агент сам кваліфікував Telegram як
+  *сповіщення* (а не систему обліку) і поклав у текст лише `name`, `source`,
+  `budgetUsd`. Тест `не містить email і телефону` це фіксує асертами
+  `expect(text).not.toContain(lead.email)`.
+- **Найцікавіше — як агент повівся на межі з ядром.** Bot API повертає `200` з
+  `{"ok":false,"description":…}`, тож відповідь треба розбирати guard'ом із полем
+  `boolean`. У `core/parse.ts` є `isRecord`, `isString`, `isNumber` — **`isBoolean`
+  немає**. Агент не додав його в ядро (це була б заборонена зміна) і не вигадав
+  неіснуючий експорт: написав інлайновий `typeof value.ok === "boolean"` у власному
+  guard і **явно пояснив це рішення** в підсумку. Тобто правило «публічний API ядра —
+  рівно цей, іншого не існує» спрацювало саме там, де мало.
+- Токен бота потрапляє лише в URL для `postJson()`; у журнал він не пишеться, а якби
+  потрапив — `redact()` у `core/log.ts` має патерн `bot\d{6,}:[A-Za-z0-9_-]{20,}`.
 
 ## Task E (бонус) — хук
 
