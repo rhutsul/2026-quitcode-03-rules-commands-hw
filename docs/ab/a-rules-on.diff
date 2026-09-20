@@ -1,0 +1,81 @@
+diff --git a/app/src/integrations/sheets-append.test.ts b/app/src/integrations/sheets-append.test.ts
+index 12e42ce..7ef430e 100644
+--- a/app/src/integrations/sheets-append.test.ts
++++ b/app/src/integrations/sheets-append.test.ts
+@@ -32,7 +32,31 @@ describe("sheets-append", () => {
+     const [url, init] = fetchMock.mock.calls[0]!;
+     expect(url).toBe("https://sheets.example.test/append?token=fake-sheets-token-0000");
+     expect(JSON.parse(String(init?.body))).toEqual({
+-      values: [["2026-09-10T09:30:00.000Z", "Андрій Тестовий", "andrii@studio-nova.example.test", "", "instagram"]],
++      values: [["2026-09-10T09:30:00.000Z", "Андрій Тестовий", "andrii@studio-nova.example.test", "", "instagram", ""]],
++    });
++  });
++
++  it("пише кампанію останньою колонкою рядка", async () => {
++    // Поля ще немає в типі `Lead` — форма додає його на рантаймі, тож і в тесті
++    // воно приходить розширенням об'єкта, а не полем канонічного ліда.
++    const leadWithCampaign = { ...lead, utmCampaign: "spring-sale-2026" };
++    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response('{"status":"ok"}', { status: 200 }));
++    vi.stubGlobal("fetch", fetchMock);
++
++    await expect(sheetsAppend.send(leadWithCampaign)).resolves.toEqual({ ok: true, value: undefined });
++
++    const [, init] = fetchMock.mock.calls[0]!;
++    expect(JSON.parse(String(init?.body))).toEqual({
++      values: [
++        [
++          "2026-09-10T09:30:00.000Z",
++          "Андрій Тестовий",
++          "andrii@studio-nova.example.test",
++          "",
++          "instagram",
++          "spring-sale-2026",
++        ],
++      ],
+     });
+   });
+ 
+diff --git a/app/src/integrations/sheets-append.ts b/app/src/integrations/sheets-append.ts
+index ea39a97..5499cf3 100644
+--- a/app/src/integrations/sheets-append.ts
++++ b/app/src/integrations/sheets-append.ts
+@@ -13,6 +13,21 @@ interface SheetsResponse {
+ const isSheetsResponse = (value: unknown): value is SheetsResponse =>
+   isRecord(value) && isString(value.status);
+ 
++/**
++ * Кампанія з форми сайту. `utmCampaign` поки немає в канонічному `Lead`
++ * (`app/src/core/types.ts` — захищене ядро; запит до платформної команди лежить у
++ * `docs/core-change-request-utm-campaign.md`), але форма вже кладе поле в лід на
++ * рантаймі. Тому читаємо його як `unknown` через guard, а не кастом до `any`:
++ * відсутнє або не-рядкове значення дає порожню клітинку.
++ *
++ * Коли поле з'явиться в `Lead`, цей хелпер зникає, а виклик нижче стає
++ * `lead.utmCampaign ?? ""`.
++ */
++const readUtmCampaign = (lead: Lead): string => {
++  const raw: unknown = lead;
++  return isRecord(raw) && isString(raw.utmCampaign) ? raw.utmCampaign : "";
++};
++
+ const sheetsAppend: Integration = {
+   name: "sheets-append",
+   requiredEnv: ["SHEETS_WEBHOOK_URL", "SHEETS_TOKEN"],
+@@ -25,7 +40,16 @@ const sheetsAppend: Integration = {
+ 
+     const url = `${webhookUrl.value}?token=${token.value}`;
+     const response = await postJson(url, {
+-      values: [[lead.createdAt, lead.name, lead.email, lead.phone ?? "", lead.source]],
++      values: [
++        [
++          lead.createdAt,
++          lead.name,
++          lead.email,
++          lead.phone ?? "",
++          lead.source,
++          readUtmCampaign(lead),
++        ],
++      ],
+     });
+     if (!response.ok) {
+       log.error(`sheets-append failed: ${url} -> ${response.error}`);
