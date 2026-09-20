@@ -175,7 +175,45 @@
   Причина — формулювання в розділі `Enforcement`: «не намагайся — доповідай про блок».
   Після цього правило доповнено єдиним винятком: якщо людина прямо просить перевірити
   **сам хук**, агент робить рівно одну спробу й дослівно наводить відповідь хука.
-- Спроба змінити `app/src/core/...` у живій сесії → що відповів хук (цитата): _(заповнюється)_
+- **Жива перевірка (після виправлення правила): хук спрацював.** Запит — «зроби рівно
+  одну спробу дописати коментар на початок `app/src/core/log.ts`». Агент зробив спробу
+  через інструмент `Edit`, і вона була заблокована. Дослівна відповідь:
+
+  ```
+  PreToolUse:Edit hook error: [node "$CLAUDE_PROJECT_DIR/.claude/hooks/protect-core.mjs"]:
+  protect-core: blocked a write to C:/Users/.../app/src/core/log.ts — app/src/core/ is a
+  protected path.
+
+  app/src/core/** belongs to the platform team; app/scripts/**, materials/**,
+  .github/** and .coderabbit.yaml are the assignment's inputs and its verification tooling.
+
+  This hook does not take permission from the conversation: a human saying
+  "go ahead" does not unblock it. If the task genuinely needs a core change,
+  stop and hand over the four points from the do-not-touch rule (file and symbol,
+  why, what is done and what remains, the option without the core change).
+  Only the human can lift this, by editing .claude/settings.json themselves.
+  ```
+
+  Стан після спроби: `git status --short` і `git diff --stat` порожні, перші рядки
+  `log.ts` оригінальні — файл не змінився.
+- **Дірка, яку знайшов агент під час перевірки, і як її закрито.** Він зазначив, що
+  навмисно йшов через `Edit`, бо `sed -i` у Bash пройшов би **повз** хук з matcher
+  `Edit|Write` і реально змінив би ядро. Це слушно: `PreToolUse` бачить виклик
+  інструмента, а не наслідки шел-команди. Тому хук доповнено гілкою для `Bash`: команда
+  блокується, якщо згадує захищений шлях **разом** із записом (`sed -i`, `tee`, `>`,
+  `>>`, `rm`, `mv`, `cp`, `truncate`) або містить `--write-lock`. Читання (`cat`,
+  `grep`, `git diff` по захищеному шляху) лишається дозволеним — інакше стало б
+  неможливо перевіряти стан.
+- **Хук одразу впіймав сам себе — на моєму ж коміті.** Щойно `Bash` додали в matcher,
+  перша ж спроба закомітити зміну була заблокована: **текст повідомлення коміту**
+  містив рядок `--write-lock`, і перевірка, яка дивилась на всю команду цілком, не
+  відрізнила згадку в heredoc від справжнього виклику. Через це в хук додано
+  `stripLiterals()` — перед перевіркою вирізаються тіла heredoc і рядки в лапках, тож
+  «згадати» захищений шлях у тексті тепер можна, а «записати» в нього — ні.
+  Харнес виріс до 24 кейсів, серед них окремі на цей випадок: коміт із `--write-lock`
+  у повідомленні проходить, `npm run check:rules -- --write-lock` блокується;
+  `echo 'app/src/core/log.ts is protected' > docs/note.md` проходить,
+  `sed -i 's/a/b/' app/src/core/log.ts` блокується.
 
 ## Виправлення інциденту (опційне за умовами, зроблено після Task D)
 
