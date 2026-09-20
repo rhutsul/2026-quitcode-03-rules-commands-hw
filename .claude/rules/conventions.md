@@ -54,9 +54,9 @@ lost timeouts, tokens in the log, silently corrupted state. The static check in
 
 - `cd app && npm run check:rules` → the `http-via-core`, `env-via-config`,
   `json-via-parse`, `log-via-logger`, `no-any`, `no-new-deps` lines did not grow
-  against the baseline `TOTAL: 8` (legacy: 7 in `sheets-append.ts`, 1 in
-  `sync/state.ts`).
-- `cd app && npm test` → 18 tests green (plus any you added).
+  against the count you saw before your change (this branch is at `TOTAL: 0`; the
+  starter shipped with 8 in legacy code).
+- `cd app && npm test` → every test green, and no fewer than before your change.
 - `cd app && npm run typecheck` → no errors.
 - Data minimisation: no `email` or `phone` in the request body of any notification
   integration.

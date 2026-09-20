@@ -45,17 +45,46 @@ const LOCK_REWRITE = /--write-lock/;
  * command. Without this, writing a commit message that mentions core.lock.json would
  * be blocked, which is how this function earned its existence.
  */
-function stripLiterals(command) {
-  let stripped = command.replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*?^\2$/gm, " ");
+function stripHeredocs(command) {
+  const closed = command.replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[\s\S]*?^\2$/gm, " ");
   // An unterminated heredoc (the body is still being streamed) — drop the tail.
-  stripped = stripped.replace(/<<-?\s*(['"]?)[A-Za-z_][A-Za-z0-9_]*\1[\s\S]*$/, " ");
-  return stripped.replace(/'[^']*'|"[^"]*"/g, " ");
+  return closed.replace(/<<-?\s*(['"]?)[A-Za-z_][A-Za-z0-9_]*\1[\s\S]*$/, " ");
+}
+
+const stripQuotes = (command) => command.replace(/'[^']*'|"[^"]*"/g, " ");
+
+function stripLiterals(command) {
+  return stripQuotes(stripHeredocs(command));
+}
+
+/**
+ * `sh -c "…"` carries a whole command inside a quoted string, which stripLiterals()
+ * would otherwise erase — turning `bash -c 'printf x > app/src/core/types.ts'` into
+ * something that looks like it writes nothing. Each such body is checked as a command
+ * in its own right.
+ */
+const SHELL_DASH_C = /\b(?:ba|z|k|da)?sh(?:\.exe)?\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*c[A-Za-z]*\s+(['"])([\s\S]*?)\1/g;
+
+function nestedCommands(rawCommand) {
+  return [...rawCommand.matchAll(SHELL_DASH_C)].map((match) => match[2]);
 }
 
 /** Why this shell command is refused, or null when it only reads. */
-function shellRefusal(rawCommand) {
+function shellRefusal(rawCommand, depth = 0) {
   if (typeof rawCommand !== "string" || rawCommand.length === 0) return null;
-  const command = stripLiterals(rawCommand);
+
+  // Heredocs go first: a commit message quoting `bash -c "… > app/src/core/…"` is text,
+  // not a nested command, and scanning the raw string would refuse it.
+  const outside = stripHeredocs(rawCommand);
+
+  if (depth < 3) {
+    for (const nested of nestedCommands(outside)) {
+      const refusal = shellRefusal(nested, depth + 1);
+      if (refusal !== null) return refusal;
+    }
+  }
+
+  const command = stripQuotes(outside);
   if (LOCK_REWRITE.test(command)) {
     return "it regenerates app/scripts/core.lock.json (--write-lock), which forges the check:rules result";
   }

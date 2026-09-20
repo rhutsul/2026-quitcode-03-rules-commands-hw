@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -55,6 +55,17 @@ describe("loadState", () => {
 
     expect(state.ok).toBe(false);
   });
+
+  // "z" — рядок, який сортується вище за будь-яку ISO-мітку, тож із ним жоден лід
+  // ніколи не потрапив би в pending, а зламаний checkpoint зберігався б далі.
+  it.each(["z", "2026-09-10", "10.09.2026", "2026-09-10T08:00:00+02:00", ""])(
+    "повертає помилку на рядку, що не є ISO-8601 UTC: %j",
+    (value) => {
+      writeFileSync(statePath, JSON.stringify({ lastSyncedAt: value }));
+
+      expect(loadState(statePath).ok).toBe(false);
+    },
+  );
 });
 
 describe("saveState", () => {
@@ -71,5 +82,19 @@ describe("saveState", () => {
     });
 
     expect(saved.ok).toBe(false);
+  });
+
+  // Запис іде через тимчасовий файл і rename, тож невдала спроба не має ні обрізати
+  // наявний checkpoint, ні лишати по собі сміття.
+  it("не псує наявний стан і не лишає тимчасових файлів, якщо запис не вдався", () => {
+    writeFileSync(statePath, JSON.stringify({ lastSyncedAt: "2026-09-09T23:55:00.000Z" }));
+    const target = join(dir, "sub");
+    mkdirSync(target);
+
+    const saved = saveState(target, { lastSyncedAt: "2026-09-10T08:00:00.000Z" });
+
+    expect(saved.ok).toBe(false);
+    expect(loadState(statePath)).toEqual({ ok: true, value: { lastSyncedAt: "2026-09-09T23:55:00.000Z" } });
+    expect(readdirSync(dir).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 });
