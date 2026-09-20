@@ -38,6 +38,18 @@ meaningless.
 - Paths that are free to change: `app/src/integrations/**`, `app/src/sync/**`,
   `docs/**`, `AGENTS.md`, `CLAUDE.md`, `.claude/**`, `.cursor/**`.
 
+## Enforcement
+
+This rule is also wired to a `PreToolUse` hook — `.claude/hooks/protect-core.mjs`,
+registered in `.claude/settings.json` — which denies any `Edit`/`Write` whose target
+resolves inside a protected path. Two consequences:
+
+- Approval given in the conversation does **not** lift the block: the hook never reads
+  the chat. Attempting the edit after a human says "go ahead" fails in exactly the same
+  way, so do not try it — report the block instead.
+- Only the human can lift it, by editing `.claude/settings.json` themselves. That is
+  deliberate: a rule can be talked around, a hook cannot.
+
 ## How to verify
 
 - `cd app && npm run check:rules` → `core-untouched  0`, and `TOTAL` did not drop

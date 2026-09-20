@@ -153,5 +153,17 @@
 
 ## Task E (бонус) — хук
 
-- Файли: `.claude/settings.json`, `.claude/hooks/protect-core.mjs`
-- Спроба змінити `app/src/core/...` → що відповів хук (цитата): _(заповнюється)_
+- Файли: `.claude/settings.json` (`PreToolUse`, matcher `Edit|Write|MultiEdit|NotebookEdit`),
+  `.claude/hooks/protect-core.mjs`
+- Що саме захищено: `app/src/core/`, `app/scripts/`, `materials/`, `.github/`,
+  `.coderabbit.yaml` — тобто весь перелік із правила `do-not-touch`, а не лише ядро.
+- Скрипт на Node (не bash) — щоб працював і на Windows. Читає JSON зі stdin, бере шлях
+  із `tool_input.file_path` / `notebook_path` / `edits[].file_path`, зводить його до
+  шляху відносно `CLAUDE_PROJECT_DIR` і на збіг із захищеним префіксом пише причину в
+  stderr та виходить з кодом **2**.
+- Автономна перевірка скрипта (12 кейсів, харнес поза репозиторієм): блокує відносний і
+  абсолютний шлях у `core/`, `core.lock.json`, `materials/`, `.coderabbit.yaml`,
+  `MultiEdit` з core серед правок, а також **битий payload** (щоб зіпсований ввід не
+  вимикав захист мовчки); пропускає `integrations/`, `sync/`, `docs/`, шлях поза
+  проєктом і виклик без шляху. Усі 12 — як очікувалось.
+- Спроба змінити `app/src/core/...` у живій сесії → що відповів хук (цитата): _(заповнюється)_
