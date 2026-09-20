@@ -50,6 +50,12 @@ resolves inside a protected path. Two consequences:
 - Only the human can lift it, by editing `.claude/settings.json` themselves. That is
   deliberate: a rule can be talked around, a hook cannot.
 
+One exception to "do not try it": when the human explicitly asks you to **verify the
+hook itself**, attempt the edit exactly once and report the hook's response verbatim.
+The attempt is expected to fail — that is the point of the check. Do not retry it, do
+not look for another way in, and do not treat a successful write as permission: if the
+edit goes through, say so plainly, because it means the guard is broken.
+
 ## How to verify
 
 - `cd app && npm run check:rules` → `core-untouched  0`, and `TOTAL` did not drop
