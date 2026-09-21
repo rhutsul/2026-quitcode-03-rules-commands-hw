@@ -32,6 +32,18 @@ describe("loadState", () => {
     },
   );
 
+  // Форму зберігаємо канонічною: runSync порівнює мітки як рядки, тож «…:00Z» сортується
+  // після «…:00.500Z», хоча хронологічно старіший.
+  it.each([
+    ["2026-09-09T23:55:00Z", "2026-09-09T23:55:00.000Z"],
+    ["2026-09-09T23:55:00.5Z", "2026-09-09T23:55:00.500Z"],
+    ["2026-09-09T23:55:00.05Z", "2026-09-09T23:55:00.050Z"],
+  ])("нормалізує %j до %j", (stored, expected) => {
+    writeFileSync(statePath, JSON.stringify({ lastSyncedAt: stored }));
+
+    expect(loadState(statePath)).toEqual({ ok: true, value: { lastSyncedAt: expected } });
+  });
+
   it("читає збережений стан", () => {
     writeFileSync(statePath, JSON.stringify({ lastSyncedAt: "2026-09-09T23:55:00.000Z" }));
 

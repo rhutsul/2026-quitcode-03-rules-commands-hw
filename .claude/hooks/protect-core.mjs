@@ -31,7 +31,17 @@ function protectedMatch(target, projectDir) {
   const absolute = isAbsolute(cleaned) ? cleaned : resolve(projectDir, cleaned);
   const rel = toPosix(relative(projectDir, absolute));
   if (rel.startsWith("../")) return null; // outside the project: not ours to guard
-  return PROTECTED.find((guarded) => rel === guarded || rel.startsWith(`${guarded}/`)) ?? null;
+  if (rel === "") return PROTECTED[0]; // the repository root contains every protected path
+  return (
+    PROTECTED.find(
+      (guarded) =>
+        rel === guarded ||
+        rel.startsWith(`${guarded}/`) ||
+        // An ancestor counts too: `rm -rf app` and `git checkout -- app` both reach
+        // app/src/core without ever naming it.
+        guarded.startsWith(`${rel}/`),
+    ) ?? null
+  );
 }
 
 /** Every path a file-editing tool call would write to. */
@@ -128,6 +138,14 @@ function tokenize(command) {
 
 const baseName = (word) => toPosix(word).split("/").pop() ?? word;
 
+// A path built at runtime — `$DIR/x`, `$(pwd)/x`, `` `pwd`/x `` — cannot be checked
+// here, and "cannot check" must mean "refuse" for anything that writes.
+const UNRESOLVABLE = /[$`]/;
+
+// Git subcommands that rewrite the working tree wholesale, so an explicit protected
+// argument is not required for them to overwrite app/src/core.
+const GIT_TREE_WRITERS = new Set(["checkout", "switch", "restore", "apply", "clean"]);
+
 // Commands whose file arguments are written, not read.
 const WRITE_COMMANDS = new Set(["tee", "truncate", "rm", "rmdir", "mv", "cp", "dd", "touch", "ln", "install", "shred"]);
 const SHELLS = /^(?:ba|z|k|da)?sh(?:\.exe)?$/;
@@ -157,6 +175,9 @@ function shellRefusal(rawCommand, projectDir, depth = 0) {
       if (token.type !== "redirect") continue;
       const target = segment[position + 1];
       if (target?.type !== "word") continue;
+      if (UNRESOLVABLE.test(target.text)) {
+        return `it redirects output into "${target.text}", a path this hook cannot resolve`;
+      }
       const guarded = protectedMatch(target.text, projectDir);
       if (guarded !== null) return `it redirects output into ${guarded}/`;
     }
@@ -171,14 +192,21 @@ function shellRefusal(rawCommand, projectDir, depth = 0) {
 
     const command = baseName(words[0].text);
     const rest = words.slice(1);
-    const protectedArgument = () => {
-      for (const word of rest) {
+    /** A protected path among the arguments, or "?" when one of them cannot be resolved. */
+    const protectedArgument = (candidates = rest) => {
+      for (const word of candidates) {
         if (word.text.startsWith("-")) continue;
+        if (UNRESOLVABLE.test(word.text)) return "?";
         const guarded = protectedMatch(word.text, projectDir);
         if (guarded !== null) return guarded;
       }
       return null;
     };
+
+    const refuseArgument = (guarded, verb) =>
+      guarded === "?"
+        ? `it ${verb} a path this hook cannot resolve — spell the path out instead of building it at runtime`
+        : `it ${verb} the protected path ${guarded}/`;
 
     // 3. A shell carrying its payload in `-c`: judge that payload as a command.
     if (SHELLS.test(command) && depth < 3) {
@@ -194,27 +222,47 @@ function shellRefusal(rawCommand, projectDir, depth = 0) {
     // 4. Commands that write their file arguments.
     if (WRITE_COMMANDS.has(command)) {
       const guarded = protectedArgument();
-      if (guarded !== null) return `it writes to the protected path ${guarded}/`;
+      if (guarded !== null) return refuseArgument(guarded, "writes to");
     }
 
     if (command === "sed" && rest.some((word) => /^-[a-zA-Z]*i/.test(word.text))) {
       const guarded = protectedArgument();
-      if (guarded !== null) return `it edits ${guarded}/ in place`;
+      if (guarded !== null) return refuseArgument(guarded, "edits in place");
     }
 
-    if (command === "git" && rest.some((word) => ["checkout", "restore", "apply", "clean"].includes(word.text))) {
-      const guarded = protectedArgument();
-      if (guarded !== null) return `it restores files inside ${guarded}/ from git`;
+    // 5. Git subcommands that rewrite the working tree. `git checkout other-branch` names
+    // no protected path yet can replace app/src/core wholesale, so these are allowed only
+    // when limited to an explicit pathspec after `--` that lands outside protected paths.
+    if (command === "git") {
+      const subcommand = rest.find((word) => !word.text.startsWith("-"))?.text;
+      const hardReset = subcommand === "reset" && rest.some((word) => word.text === "--hard");
+      const stashRestore =
+        subcommand === "stash" && rest.some((word) => ["pop", "apply"].includes(word.text));
+
+      if (GIT_TREE_WRITERS.has(subcommand) || hardReset || stashRestore) {
+        const newBranch = rest.some((word) => /^-[bB]$/.test(word.text));
+        const separator = rest.findIndex((word) => word.text === "--");
+        const pathspec = separator === -1 ? [] : rest.slice(separator + 1);
+
+        if (pathspec.length > 0) {
+          const guarded = protectedArgument(pathspec);
+          if (guarded !== null) return refuseArgument(guarded, `restores from git into`);
+        } else if (!newBranch) {
+          return `\`git ${subcommand}\` rewrites the working tree, which can silently replace app/src/core — limit it to an explicit pathspec after \`--\``;
+        }
+      }
     }
 
-    // 5. `node -e "...writeFileSync('app/src/core/...')"`.
+    // 6. `node -e "…writeFileSync(…)"`. A path can be assembled from fragments, so any
+    // inline script that writes at all is refused rather than guessed at.
     if ((command === "node" || command === "node.exe") && rest.some((word) => /^-[ep]$/.test(word.text))) {
-      for (const word of rest) {
-        if (!NODE_WRITES.test(word.text)) continue;
-        for (const candidate of word.text.split(/['"`(),\s]+/)) {
+      const writer = rest.find((word) => NODE_WRITES.test(word.text));
+      if (writer !== undefined) {
+        for (const candidate of writer.text.split(/['"`(),\s]+/)) {
           const guarded = protectedMatch(candidate, projectDir);
           if (guarded !== null) return `the inline script writes to ${guarded}/`;
         }
+        return "an inline `node -e` script writes to disk, and this hook cannot tell where — put the script in a file under an allowed path instead";
       }
     }
   }

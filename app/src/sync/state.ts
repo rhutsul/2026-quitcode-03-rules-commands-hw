@@ -54,7 +54,13 @@ export function loadState(path: string): Result<SyncState> {
     return { ok: false, error: `sync-state: cannot read ${path}: ${reason(error)}` };
   }
 
-  return parseJson(text, isSyncState, "sync-state");
+  const parsed = parseJson(text, isSyncState, "sync-state");
+  if (!parsed.ok) return parsed;
+
+  // `runSync` compares checkpoints with `lead.createdAt` as strings, so the stored form
+  // has to be canonical: `…:00Z` is chronologically older than `…:00.500Z` but sorts
+  // after it, which would hide that lead forever.
+  return { ok: true, value: { lastSyncedAt: canonicalIsoUtc(parsed.value.lastSyncedAt) ?? parsed.value.lastSyncedAt } };
 }
 
 /**
