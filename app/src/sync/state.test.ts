@@ -23,6 +23,15 @@ describe("loadState", () => {
     expect(state).toEqual({ ok: true, value: { lastSyncedAt: "1970-01-01T00:00:00.000Z" } });
   });
 
+  it.each(["2026-09-09T23:55:00.000Z", "2026-09-09T23:55:00Z", "2026-09-09T23:55:00.5Z", "2024-02-29T00:00:00.000Z"])(
+    "приймає коректну ISO-8601 UTC мітку: %j",
+    (value) => {
+      writeFileSync(statePath, JSON.stringify({ lastSyncedAt: value }));
+
+      expect(loadState(statePath).ok).toBe(true);
+    },
+  );
+
   it("читає збережений стан", () => {
     writeFileSync(statePath, JSON.stringify({ lastSyncedAt: "2026-09-09T23:55:00.000Z" }));
 
@@ -58,7 +67,7 @@ describe("loadState", () => {
 
   // "z" — рядок, який сортується вище за будь-яку ISO-мітку, тож із ним жоден лід
   // ніколи не потрапив би в pending, а зламаний checkpoint зберігався б далі.
-  it.each(["z", "2026-09-10", "10.09.2026", "2026-09-10T08:00:00+02:00", ""])(
+  it.each(["z", "2026-09-10", "10.09.2026", "2026-09-10T08:00:00+02:00", "", "2026-02-31T00:00:00.000Z", "2026-13-01T00:00:00.000Z", "2026-09-10T25:00:00.000Z"])(
     "повертає помилку на рядку, що не є ISO-8601 UTC: %j",
     (value) => {
       writeFileSync(statePath, JSON.stringify({ lastSyncedAt: value }));

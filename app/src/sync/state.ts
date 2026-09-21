@@ -15,11 +15,25 @@ const INITIAL_STATE: SyncState = { lastSyncedAt: "1970-01-01T00:00:00.000Z" };
 
 // `lastSyncedAt` is compared with `lead.createdAt` as a string, so the shape matters as
 // much as the type: `"z"` is a string, sorts above every ISO timestamp, and would make
-// every run report zero pending leads.
-const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
+// every run report zero pending leads. A syntactically valid but non-existent date is
+// just as harmful — `Date.parse("2026-02-31T00:00:00.000Z")` succeeds and silently
+// means 3 March, so leads created in between would never be picked up again. Hence the
+// round trip: the value has to survive parsing unchanged.
+const ISO_UTC = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,3}))?Z$/;
 
-const isIsoUtc = (value: unknown): value is string =>
-  isString(value) && ISO_UTC.test(value) && Number.isFinite(Date.parse(value));
+function canonicalIsoUtc(value: string): string | null {
+  const match = ISO_UTC.exec(value);
+  if (match === null) return null;
+  return `${match[1]}.${(match[2] ?? "").padEnd(3, "0")}Z`;
+}
+
+const isIsoUtc = (value: unknown): value is string => {
+  if (!isString(value)) return false;
+  const canonical = canonicalIsoUtc(value);
+  if (canonical === null) return false;
+  const parsed = Date.parse(canonical);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === canonical;
+};
 
 const isSyncState = (value: unknown): value is SyncState =>
   isRecord(value) && isIsoUtc(value.lastSyncedAt);
