@@ -24,23 +24,38 @@ const readStdin = async () => {
 
 const toPosix = (path) => path.split(sep).join("/");
 
+// Windows and macOS resolve paths case-insensitively, so APP/SRC/CORE/log.ts is the
+// same file as app/src/core/log.ts and must be judged the same way.
+const caseSensitive = process.platform === "linux";
+const fold = (path) => (caseSensitive ? path : path.toLowerCase());
+
 /** The protected prefix this path falls under, or null. */
 function protectedMatch(target, projectDir) {
   const cleaned = toPosix(target).replace(/^\.\//, "");
   if (cleaned.length === 0) return null;
-  const absolute = isAbsolute(cleaned) ? cleaned : resolve(projectDir, cleaned);
-  const rel = toPosix(relative(projectDir, absolute));
+  const absolute = toPosix(isAbsolute(cleaned) ? cleaned : resolve(projectDir, cleaned));
+
+  // Match on path segments first, not on a prefix of the project directory: a git
+  // worktree or a plain copy of this repository lives outside CLAUDE_PROJECT_DIR, and
+  // its app/src/core is just as protected as ours.
+  const haystack = fold(`${absolute}/`);
+  const bySegment = PROTECTED.find((guarded) => haystack.includes(fold(`/${guarded}/`)));
+  if (bySegment !== undefined) return bySegment;
+
+  const rel = fold(toPosix(relative(projectDir, absolute)));
   if (rel.startsWith("../")) return null; // outside the project: not ours to guard
   if (rel === "") return PROTECTED[0]; // the repository root contains every protected path
   return (
-    PROTECTED.find(
-      (guarded) =>
-        rel === guarded ||
-        rel.startsWith(`${guarded}/`) ||
+    PROTECTED.find((guarded) => {
+      const folded = fold(guarded);
+      return (
+        rel === folded ||
+        rel.startsWith(`${folded}/`) ||
         // An ancestor counts too: `rm -rf app` and `git checkout -- app` both reach
         // app/src/core without ever naming it.
-        guarded.startsWith(`${rel}/`),
-    ) ?? null
+        folded.startsWith(`${rel}/`)
+      );
+    }) ?? null
   );
 }
 

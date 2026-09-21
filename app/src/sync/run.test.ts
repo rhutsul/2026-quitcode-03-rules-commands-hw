@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -50,7 +50,7 @@ describe("runSync", () => {
 
     const report = await runSync(leads, [recordingIntegration(sent)], statePath);
 
-    expect(report).toEqual({ pending: 3, delivered: 3, failed: 0 });
+    expect(report).toEqual({ pending: 3, delivered: 3, failed: 0, progressSaved: true });
     expect(JSON.parse(readFileSync(statePath, "utf8"))).toEqual({ lastSyncedAt: "2026-09-10T08:00:00.000Z" });
   });
 
@@ -64,6 +64,18 @@ describe("runSync", () => {
     expect(sent).toEqual(["ld_0002", "ld_0003"]);
   });
 
+  // Прогрес не зафіксовано — це має бути видно в звіті, а не лише в журналі: інакше
+  // виклик вважає прогін успішним, а наступний розішле ті самі ліди наново.
+  it("повідомляє у звіті, що прогрес не збережено", async () => {
+    const sent: string[] = [];
+    const unwritable = join(dir, "state-dir");
+    mkdirSync(unwritable);
+
+    const report = await runSync(leads, [recordingIntegration(sent)], unwritable);
+
+    expect(report.progressSaved).toBe(false);
+  });
+
   // Інцидент 09→10.09.2026: обірваний ENOSPC-запис лишив порожній файл стану,
   // після чого кожен прогін розсилав усю історію лідів наново.
   it("пропускає прогін на нечитному стані замість повторної розсилки всієї історії", async () => {
@@ -74,7 +86,7 @@ describe("runSync", () => {
     const report = await runSync(leads, [recordingIntegration(sent)], statePath);
 
     expect(sent).toEqual([]);
-    expect(report).toEqual({ pending: 0, delivered: 0, failed: 0 });
+    expect(report).toEqual({ pending: 0, delivered: 0, failed: 0, progressSaved: false });
     // Файл лишається як був: епоха на диск не потрапляє.
     expect(readFileSync(statePath, "utf8")).toBe("");
   });

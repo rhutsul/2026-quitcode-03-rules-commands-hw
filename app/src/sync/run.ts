@@ -7,9 +7,15 @@ export interface SyncReport {
   pending: number;
   delivered: number;
   failed: number;
+  /**
+   * Whether the new checkpoint reached disk. `false` means the leads of this run were
+   * delivered but the progress was not recorded, so the next run will send them again —
+   * the caller has to see that, not just find it in the log.
+   */
+  progressSaved: boolean;
 }
 
-const EMPTY_REPORT: SyncReport = { pending: 0, delivered: 0, failed: 0 };
+const EMPTY_REPORT: SyncReport = { pending: 0, delivered: 0, failed: 0, progressSaved: false };
 
 export async function runSync(
   leads: readonly Lead[],
@@ -48,8 +54,10 @@ export async function runSync(
     state.value.lastSyncedAt,
   );
   const saved = saveState(statePath, { lastSyncedAt: newest });
-  if (!saved.ok) log.error(`sync: ${saved.error}; progress not recorded`);
+  if (!saved.ok) {
+    log.error(`sync: ${saved.error}; progress not recorded — the next run will resend these leads`);
+  }
 
   log.info(`sync: ${pending.length} pending leads, ${delivered} delivered, ${failed} failed`);
-  return { pending: pending.length, delivered, failed };
+  return { pending: pending.length, delivered, failed, progressSaved: saved.ok };
 }
