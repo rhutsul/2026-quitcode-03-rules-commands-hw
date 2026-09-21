@@ -151,6 +151,65 @@ const WRITE_COMMANDS = new Set(["tee", "truncate", "rm", "rmdir", "mv", "cp", "d
 const SHELLS = /^(?:ba|z|k|da)?sh(?:\.exe)?$/;
 const NODE_WRITES = /\b(?:writeFile|appendFile|rm|rmdir|unlink|rename|mkdir|copyFile|createWriteStream|truncate)/;
 
+// Wrappers that run another command. Without unwrapping them the classification below
+// would look at `env` and never at the `rm` behind it.
+const WRAPPERS = new Set([
+  "env",
+  "command",
+  "builtin",
+  "exec",
+  "nohup",
+  "nice",
+  "ionice",
+  "stdbuf",
+  "setsid",
+  "time",
+  "timeout",
+  "xargs",
+  "sudo",
+  "doas",
+]);
+
+// Wrapper flags that swallow the token after them, so it is not the real command.
+const FLAGS_WITH_VALUE = /^-(?:u|n|o|i|e|k|s|I|L|P)$/;
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+/**
+ * Strip environment assignments and wrappers until the real command is in front.
+ * `stdinDriven` marks `xargs`, where the file arguments arrive on stdin and therefore
+ * cannot be inspected here at all.
+ */
+function unwrap(words) {
+  let rest = words;
+  let stdinDriven = false;
+
+  for (let guard = 0; guard < 10 && rest.length > 0; guard += 1) {
+    const head = rest[0].text;
+
+    if (ENV_ASSIGNMENT.test(head)) {
+      rest = rest.slice(1);
+      continue;
+    }
+
+    if (!WRAPPERS.has(baseName(head))) return { rest, stdinDriven };
+    if (baseName(head) === "xargs") stdinDriven = true;
+
+    const wrapper = baseName(head);
+    let index = 1;
+    while (index < rest.length) {
+      const word = rest[index].text;
+      if (ENV_ASSIGNMENT.test(word)) index += 1;
+      else if (FLAGS_WITH_VALUE.test(word)) index += 2; // the flag and its value
+      else if (word.startsWith("-")) index += 1;
+      else if (wrapper === "timeout" && /^[\d.]+[smhd]?$/.test(word)) index += 1; // the duration
+      else break;
+    }
+    rest = rest.slice(index);
+  }
+
+  return { rest, stdinDriven };
+}
+
 /** Split a token list into pipeline segments, one command each. */
 function segments(tokens) {
   const result = [[]];
@@ -190,8 +249,12 @@ function shellRefusal(rawCommand, projectDir, depth = 0) {
       return "it regenerates app/scripts/core.lock.json (--write-lock), which forges the check:rules result";
     }
 
-    const command = baseName(words[0].text);
-    const rest = words.slice(1);
+    // `env rm -rf app/src/core` and `SAFE=1 rm …` must be judged as `rm`, not as `env`.
+    const { rest: effective, stdinDriven } = unwrap(words);
+    if (effective.length === 0) continue;
+
+    const command = baseName(effective[0].text);
+    const rest = effective.slice(1);
     /** A protected path among the arguments, or "?" when one of them cannot be resolved. */
     const protectedArgument = (candidates = rest) => {
       for (const word of candidates) {
@@ -221,6 +284,9 @@ function shellRefusal(rawCommand, projectDir, depth = 0) {
 
     // 4. Commands that write their file arguments.
     if (WRITE_COMMANDS.has(command)) {
+      if (stdinDriven) {
+        return `\`${command}\` is fed its file arguments through xargs, so this hook cannot see what it writes to`;
+      }
       const guarded = protectedArgument();
       if (guarded !== null) return refuseArgument(guarded, "writes to");
     }
