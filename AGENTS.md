@@ -16,9 +16,9 @@ All of them from the `app/` directory:
 | Typecheck | `npm run typecheck` |
 | Project rule check | `npm run check:rules` |
 
-Current state of this branch: **30 tests green**, `typecheck` clean, `check:rules` →
-`TOTAL: 0`. Any number above zero means something regressed — compare before and after
-your change rather than trusting the absolute value.
+Run all three before and after your change and compare the two results: every test
+green, `typecheck` clean, and no new `check:rules` violations. Absolute numbers age —
+what matters is that nothing got worse than the state you started from.
 
 ## Project map
 

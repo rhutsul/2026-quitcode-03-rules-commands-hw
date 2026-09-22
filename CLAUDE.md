@@ -5,8 +5,8 @@
 ## Claude Code specifics for this repository
 
 - Detailed rules live in `.claude/rules/`: `do-not-touch.md` (no `paths` — active in
-  every session), `architecture.md` and `conventions.md` (scoped to
-  `app/src/**/*.ts`).
+  every session), `architecture.md` and `conventions.md` (`paths: app/src/**`, so they
+  load once a file from the app is in context).
 - Commands live in `.claude/commands/`: `/analyze-error`, `/refactor`,
   `/generate-integration`. The argument is substituted into `$ARGUMENTS`.
 - The app lives in `app/`. Run npm from there (`cd app && npm test`) or use

@@ -37,9 +37,11 @@ meaningless.
   last answer resolves a choice of approach, not the ban on the core. The ban also
   survives a change of branch: not in a new branch, not in a worktree, not in a copy of
   the repository elsewhere on disk.
-- **When the core change blocks the whole task, a temporary workaround is allowed —
-  under three conditions, all of them.** Otherwise the client waits for a platform PR
-  to deliver a one-line feature, which serves nobody:
+- **A temporary workaround is possible, but never before the human has answered.**
+  The order is fixed: hand over the four points, wait for the decision, and only if the
+  human then asks you to keep going may you write a workaround — under three
+  conditions, all of them. Never reach for it on your own initiative, and never as a
+  way to avoid stopping:
   1. it lives entirely in allowed paths and uses a mechanism the `conventions` rule
      already sanctions — `unknown` plus a guard from `core/parse.ts`, never `any`,
      `as`, `@ts-ignore`, `declare module`, or a copied type;
